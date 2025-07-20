@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EICR Voice App - Official</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('Service Worker Registered'))
+      .catch(err => console.log('SW registration failed', err));
+  }
+</script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: #f8f8f8; }
+  h1 { text-align: center; margin-bottom: 10px; }
+  .section { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  label { display: block; margin: 6px 0 2px; font-weight: bold; }
+  input, textarea { width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid #ccc; border-radius: 4px; }
+  button { margin: 4px 0; padding: 10px 14px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  .mic { background: #10b981; margin-left: 5px; }
+  .checklist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  canvas { border: 1px solid #ccc; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Electrical Installation Condition Report</h1>
+
+<!-- Part 1: Client Details -->
+<div class="section">
+  <h2>Part 1: Details of the Client / Installation</h2>
+  <label>Client Name</label>
+  <input id="clientName"><button class="mic" onclick="startVoice('clientName')">🎤</button>
+  <label>Address</label>
+  <textarea id="clientAddress"></textarea>
+  <label>Purpose of Report</label>
+  <input id="purpose">
+  <label>Date of Inspection</label>
+  <input id="inspectionDate" type="date">
+  <label>Details of Installation</label>
+  <textarea id="installationDetails"></textarea>
+</div>
+
+<!-- Part 2: Supply Characteristics -->
+<div class="section">
+  <h2>Part 2: Supply Characteristics and Earthing</h2>
+  <label>Earthing Arrangement</label><input id="earthing">
+  <label>Main Protective Device</label><input id="device">
+  <label>Ze (Ω)</label><input id="ze">
+  <label>Nominal Voltage (V)</label><input id="voltage">
+  <label>Frequency (Hz)</label><input id="frequency">
+</div>
+
+<!-- Part 3: Extent and Limitations -->
+<div class="section">
+  <h2>Part 3: Extent and Limitations</h2>
+  <textarea id="limitations" placeholder="Enter any agreed limitations"></textarea>
+</div>
+
+<!-- Part 4: Schedule of Inspections -->
+<div class="section">
+  <h2>Part 4: Schedule of Inspections</h2>
+  <div class="checklist-grid" id="inspectionChecklist"></div>
+</div>
+
+<!-- Part 5: Observations -->
+<div class="section">
+  <h2>Part 5: Observations and Recommendations</h2>
+  <button onclick="addObservation()">+ Add Observation</button>
+  <div id="observations"></div>
+</div>
+
+<!-- Schedule of Test Results -->
+<div class="section">
+  <h2>Schedule of Test Results</h2>
+  <button onclick="addCircuit()">+ Add Circuit</button>
+  <div id="circuits"></div>
+</div>
+
+<!-- Continuation -->
+<div class="section">
+  <h2>Continuation Sheet (Additional Notes)</h2>
+  <textarea id="additionalNotes"></textarea>
+</div>
+
+<!-- Signature -->
+<div class="section">
+  <h2>Declaration & Signature</h2>
+  <canvas id="sigCanvas" width="300" height="100"></canvas><br>
+  <button onclick="clearSig()">Clear Signature</button>
+</div>
+
+<!-- Export -->
+<div class="section">
+  <h2>Export</h2>
+  <button onclick="downloadPDF()">Download Full EICR PDF</button>
+</div>
+
+<script>
+// Voice input
+function startVoice(fieldId) {
+  if (!('webkitSpeechRecognition' in window)) { alert("Voice not supported"); return; }
+  const recognition = new webkitSpeechRecognition();
+  recognition.lang = 'en-GB';
+  recognition.onresult = e => document.getElementById(fieldId).value = e.results[0][0].transcript;
+  recognition.start();
+}
+
+// Checklist generation
+const inspectionItems = [
+  "Presence of earthing conductor", "Main bonding adequate", "Protective devices accessible", 
+  "Condition of consumer unit", "Labelling of circuits", "Presence of RCD protection",
+  "Condition of cables", "Polarity correct at all outlets", "Condition of switches and sockets",
+  "Condition of earthing arrangements", "Adequacy of overcurrent protection", "Presence of diagrams",
+  // ... include all 80+ official BS 7671 checklist items
+];
+const checklistDiv = document.getElementById('inspectionChecklist');
+inspectionItems.forEach((item, idx) => {
+  const label = document.createElement('label');
+  label.innerHTML = `<input type="checkbox" id="inspection${idx}"> ${item}`;
+  checklistDiv.appendChild(label);
+});
+
+// Add Observations
+function addObservation() {
+  const div = document.createElement('div');
+  const id = 'observation_' + document.querySelectorAll('#observations input').length;
+  div.innerHTML = `<input id="${id}" placeholder="Observation">`;
+  document.getElementById('observations').appendChild(div);
+}
+
+// Add Circuits
+function addCircuit() {
+  const div = document.createElement('div');
+  const id = 'circuit_' + document.querySelectorAll('#circuits input').length;
+  div.innerHTML = `<input id="${id}" placeholder="Circuit details">`;
+  document.getElementById('circuits').appendChild(div);
+}
+
+// Signature
+const canvas = document.getElementById('sigCanvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+canvas.addEventListener('mousedown', () => drawing = true);
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mousemove', draw);
+function draw(e) { if (!drawing) return; ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(e.offsetX, e.offsetY, 2, 0, Math.PI*2); ctx.fill(); }
+function clearSig() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+// PDF Export
+async function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Logos
+  const myLogo = await loadImage('powerhive-logo.png');
+  const napitLogo = await loadImage('napit-logo.png');
+  doc.addImage(myLogo, 'PNG', 10, 10, 40, 15);
+  doc.addImage(napitLogo, 'PNG', 160, 10, 40, 15);
+
+  doc.setFontSize(16);
+  doc.text("Electrical Installation Condition Report", 14, 35);
+
+  // Part 1 Table
+  const clientData = [
+    ['Client Name', document.getElementById('clientName').value],
+    ['Address', document.getElementById('clientAddress').value],
+    ['Purpose', document.getElementById('purpose').value],
+    ['Date', document.getElementById('inspectionDate').value],
+    ['Installation Details', document.getElementById('installationDetails').value]
+  ];
+  doc.autoTable({ startY: 40, head: [['Field','Value']], body: clientData });
+
+  // Part 2 Table
+  const supplyData = [
+    ['Earthing Arrangement', document.getElementById('earthing').value],
+    ['Main Protective Device', document.getElementById('device').value],
+    ['Ze (Ω)', document.getElementById('ze').value],
+    ['Voltage', document.getElementById('voltage').value],
+    ['Frequency', document.getElementById('frequency').value]
+  ];
+  doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, head: [['Supply Characteristics','Value']], body: supplyData });
+
+  // Inspections
+  let inspectionRows = [];
+  inspectionItems.forEach((item, idx) => {
+    const checked = document.getElementById(`inspection${idx}`).checked ? '✔' : '✘';
+    inspectionRows.push([item, checked]);
+  });
+  doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, head: [['Inspection Item','Status']], body: inspectionRows });
+
+  // Observations
+  let observations = [];
+  document.querySelectorAll('#observations input').forEach((i, idx) => observations.push([idx+1, i.value]));
+  doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, head: [['#','Observation']], body: observations });
+
+  // Circuits
+  let circuits = [];
+  document.querySelectorAll('#circuits input').forEach((i, idx) => circuits.push([idx+1, i.value]));
+  doc.autoTable({ startY: doc.lastAutoTable.finalY + 10, head: [['#','Circuit Details']], body: circuits });
+
+  // New page for continuation
+  doc.addPage();
+  doc.setFontSize(14);
+  doc.text("Continuation Sheet (Additional Notes)", 14, 20);
+  doc.setFontSize(12);
+  doc.text(document.getElementById('additionalNotes').value || "No additional notes", 14, 30);
+
+  // Signature
+  const signatureImage = canvas.toDataURL('image/png');
+  doc.text("Declaration:", 14, 60);
+  doc.text("I certify that this report is issued in accordance with BS 7671.", 14, 70);
+  doc.addImage(signatureImage, 'PNG', 14, 80, 60, 20);
+
+  doc.save("EICR_Report.pdf");
+}
+
+function loadImage(url) {
+  return new Promise(resolve => { const img = new Image(); img.src = url; img.onload = () => resolve(img); });
+}
+</script>
+
+</body>
+</html>
