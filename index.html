@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EICR Voice App - Official Compliant</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('Service Worker Registered'))
+      .catch(err => console.log('SW registration failed', err));
+  }
+</script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: #f8f8f8; }
+  h1 { text-align: center; margin-bottom: 10px; }
+  .section { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  label { display: block; margin: 6px 0 2px; font-weight: bold; }
+  input, textarea { width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid #ccc; border-radius: 4px; }
+  button { margin: 4px 0; padding: 10px 14px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  .mic { background: #10b981; margin-left: 5px; }
+  .checklist-grid { display: grid; grid-template-co
