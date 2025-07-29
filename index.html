@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EICR Voice App</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2563eb" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f9fafb; color: #111827; }
+    h1 { text-align: center; margin-bottom: 10px; }
+    .section { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    label { display: block; margin-bottom: 6px; font-weight: bold; }
+    input, textarea, select { width: 80%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    button { padding: 10px 14px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .mic { background: #10b981; margin-left: 5px; }
+    canvas { border: 1px solid #ccc; margin-top: 10px; }
+    .field-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <h1>EICR Voice App</h1>
+
+  <div class="section">
+    <label>Client Name</label>
+    <div class="field-row">
+      <input id="clientName" /> <button class="mic" onclick="startVoice('clientName')">🎤</button>
+    </div>
+
+    <label>Client Address</label>
+    <div class="field-row">
+      <textarea id="clientAddress"></textarea> <button class="mic" onclick="startVoice('clientAddress')">🎤</button>
+    </div>
+
+    <label>Purpose</label>
+    <div class="field-row">
+      <input id="purpose" /> <button class="mic" onclick="startVoice('purpose')">🎤</button>
+    </div>
+
+    <label>Date</label>
+    <input id="inspectionDate" type="date" />
+  </div>
+
+  <div class="section">
+    <label>Additional Notes (Generic Continuation)</label>
+    <div class="field-row">
+      <textarea id="additionalNotes"></textarea> <button class="mic" onclick="startVoice('additionalNotes')">🎤</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Observations</h2>
+    <div id="observations"></div>
+    <button onclick="addObservation()">+ Add Observation</button>
+  </div>
+
+  <div class="section">
+    <h2>Test Results</h2>
+    <div id="circuits"></div>
+    <button onclick="addCircuit()">+ Add Circuit</button>
+  </div>
+
+  <div class="section">
+    <label>Signature</label>
+    <canvas id="sigCanvas" width="300" height="100"></canvas>
+    <button onclick="clearSig()">Clear Signature</button>
+  </div>
+
+  <div class="section">
+    <button onclick="downloadPDF()">Download PDF</button>
+  </div>
+
+  <script>
+    function startVoice(fieldId) {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('Voice recognition not supported');
+        return;
+      }
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-GB';
+      recognition.onresult = (event) => {
+        document.getElementById(fieldId).value = event.results[0][0].transcript;
+      };
+      recognition.start();
+    }
+
+    function addObservation() {
+      const div = document.createElement('div');
+      const id = 'obs_' + document.querySelectorAll('#observations input').length;
+      div.className = 'field-row';
+      div.innerHTML = `<input id="${id}" placeholder="Observation"> <button class="mic" onclick="startVoice('${id}')">🎤</button>`;
+      document.getElementById('observations').appendChild(div);
+    }
+
+    function addCircuit() {
+      const div = document.createElement('div');
+      const id = 'circuit_' + document.querySelectorAll('#circuits .field-row').length;
+      div.className = 'field-row';
+      div.innerHTML = `
+        <input id="${id}_ref" placeholder="Ref" style="width:10%"> <button class="mic" onclick="startVoice('${id}_ref')">🎤</button>
+        <input id="${id}_desc" placeholder="Description" style="width:20%"> <button class="mic" onclick="startVoice('${id}_desc')">🎤</button>
+        <input id="${id}_pd" placeholder="Device" style="width:15%"> <button class="mic" onclick="startVoice('${id}_pd')">🎤</button>
+        <input id="${id}_r1r2" placeholder="R1+R2 (Ω)" style="width:15%"> <button class="mic" onclick="startVoice('${id}_r1r2')">🎤</button>
+        <input id="${id}_zs" placeholder="Zs (Ω)" style="width:10%"> <button class="mic" onclick="startVoice('${id}_zs')">🎤</button>
+        <input id="${id}_ir" placeholder="IR (MΩ)" style="width:10%"> <button class="mic" onclick="startVoice('${id}_ir')">🎤</button>
+      `;
+      document.getElementById('circuits').appendChild(div);
+    }
+
+    const canvas = document.getElementById('sigCanvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+    canvas.addEventListener('mousedown', () => drawing = true);
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mousemove', draw);
+
+    function draw(e) {
+      if (!drawing) return;
+      ctx.fillStyle = 'black';
+      ctx.beginPath();
+      ctx.arc(e.offsetX, e.offsetY, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function clearSig() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    async function downloadPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+
+      const images = [
+        'blank EICR document_page-0001.jpg',
+        'blank EICR document_page-0002.jpg',
+        'blank EICR document_page-0003.jpg',
+        'blank EICR document_page-0004.jpg',
+        'blank EICR document_page-0005.jpg',
+        'blank EICR document_page-0006.jpg',
+        'blank EICR document_page-0007.jpg'
+      ];
+
+      const phLogo = await loadImage('powerhive-logo.png');
+      const napitLogo = await loadImage('napit-logo.png');
+
+      for (let i = 0; i < images.length; i++) {
+        if (i > 0) doc.addPage();
+        const bg = await loadImage(images[i]);
+        doc.addImage(bg, 'JPEG', 0, 0, 210, 297);
+        doc.addImage(phLogo, 'PNG', 10, 5, 25, 10);
+        doc.addImage(napitLogo, 'PNG', 175, 5, 25, 10);
+      }
+
+      doc.setFontSize(10);
+      doc.text(document.getElementById('clientName').value, 50, 45);
+      doc.text(document.getElementById('clientAddress').value, 50, 52);
+      doc.text(document.getElementById('purpose').value, 50, 59);
+      doc.text(document.getElementById('inspectionDate').value, 160, 59);
+      doc.text(document.getElementById('additionalNotes').value, 20, 270);
+
+      const sig = canvas.toDataURL('image/png');
+      doc.addImage(sig, 'PNG', 60, 230, 60, 20);
+
+      doc.save("EICR_Report.pdf");
+    }
+
+    function loadImage(url) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => resolve(img);
+      });
+    }
+  </script>
+</body>
+</html>
